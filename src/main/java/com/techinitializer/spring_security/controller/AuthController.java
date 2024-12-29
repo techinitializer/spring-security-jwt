@@ -1,6 +1,6 @@
 package com.techinitializer.spring_security.controller;
 
-import com.techinitializer.spring_security.dto.LoginRequest;
+import com.techinitializer.spring_security.dto.AuthRequest;
 import com.techinitializer.spring_security.dto.RefreshTokenRequest;
 import com.techinitializer.spring_security.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,17 +19,17 @@ public class AuthController {
     private AuthService authService;
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
-        return authService.login(loginRequest);
+    public ResponseEntity<?> login(@RequestBody AuthRequest authRequest) {
+        return authService.login(authRequest);
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<?> refreshToken( @RequestBody RefreshTokenRequest refreshTokenRequest) {
+    public ResponseEntity<?> refreshToken(@RequestBody RefreshTokenRequest refreshTokenRequest) {
         return authService.refreshToken(refreshTokenRequest);
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(HttpServletRequest request) {
-        return authService.logout(request);
+    public ResponseEntity<?> logout(HttpServletRequest httpServletRequest) {
+        return authService.logout(httpServletRequest);
     }
 }

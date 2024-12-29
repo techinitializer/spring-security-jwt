@@ -3,9 +3,9 @@ package com.techinitializer.spring_security.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.techinitializer.spring_security.domain.RefreshToken;
 import com.techinitializer.spring_security.domain.User;
+import com.techinitializer.spring_security.dto.AuthRequest;
 import com.techinitializer.spring_security.dto.AuthResponse;
 import com.techinitializer.spring_security.dto.ErrorResponse;
-import com.techinitializer.spring_security.dto.LoginRequest;
 import com.techinitializer.spring_security.dto.RefreshTokenRequest;
 import com.techinitializer.spring_security.repository.RefreshTokenRepository;
 import com.techinitializer.spring_security.util.JwtUtil;
@@ -16,7 +16,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -34,7 +33,7 @@ public class AuthService {
     private JwtUtil jwtUtil;
 
     @Autowired
-    private CustomUserDetailsService userDetailsService;
+    private CustomUserDetailsService customUserDetailsService;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -42,17 +41,16 @@ public class AuthService {
     @Autowired
     private RefreshTokenRepository refreshTokenRepository;
 
-    public ResponseEntity<?> login(LoginRequest loginRequest) {
-        try {
-            // Attempt authentication
-            Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(loginRequest.username(), loginRequest.password())
-            );
+    public ResponseEntity<?> login(AuthRequest authRequest) {
+        try{
+            //attempt auth
+
+            Authentication authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(authRequest.username(),
+                    authRequest.password()));
 
             User userDetails = (User) authentication.getPrincipal();
             String jwt = jwtUtil.generateToken(authentication);
 
-            // Generate and persist refresh token
             String refreshToken = jwtUtil.generateRefreshToken(userDetails.getUsername());
             RefreshToken refreshTokenEntity = new RefreshToken(
                     refreshToken,
@@ -63,48 +61,41 @@ public class AuthService {
             refreshTokenRepository.save(refreshTokenEntity);
 
             return ResponseEntity.ok(new AuthResponse(jwt, refreshToken));
-        } catch (Exception e) {
-            // Handle any authentication or other exceptions
+        } catch (Exception ex) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse("Invalid credentials or login error"));
         }
     }
 
     public ResponseEntity<?> refreshToken(RefreshTokenRequest refreshTokenRequest) {
         try {
-
             String refreshToken = refreshTokenRequest.refreshToken();
+            Optional<RefreshToken> refreshTokenFromDb = refreshTokenRepository.findByToken(refreshToken);
 
-            Optional<RefreshToken> refreshTokenOptional = refreshTokenRepository.findByToken(refreshToken);
-
-            if (refreshTokenOptional.isEmpty() || refreshTokenOptional.get().getExpiryDate().before(new Date())
-                    || refreshTokenOptional.get().isRevoked()) {
+            if(refreshTokenFromDb.isEmpty() || refreshTokenFromDb.get().getExpiryDate().before(new Date()) || refreshTokenFromDb.get().isRevoked()) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse("Invalid refresh token"));
             }
 
-            RefreshToken refreshTokenEntity = refreshTokenOptional.get();
-            UserDetails userDetails = refreshTokenEntity.getUser();
+            RefreshToken validRefreshToken = refreshTokenFromDb.get();
+            User userDetails = validRefreshToken.getUser();
 
-            String newJwt = jwtUtil.generateToken(
-                    new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities())
-            );
-
-            // Optionally generate and update a new refresh token
+            String newJwt = jwtUtil.generateToken(new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities()));
             String newRefreshToken = jwtUtil.generateRefreshToken(userDetails.getUsername());
-            refreshTokenEntity.setToken(newRefreshToken);
-            refreshTokenEntity.setExpiryDate(Date.from(Instant.now().plusMillis(jwtUtil.getRefreshExpirationInMs())));
-            refreshTokenRepository.save(refreshTokenEntity);
+
+            validRefreshToken.setToken(newRefreshToken);
+            validRefreshToken.setExpiryDate(Date.from(Instant.now().plusMillis(jwtUtil.getRefreshExpirationInMs())));
+
+            refreshTokenRepository.save(validRefreshToken);
 
             return ResponseEntity.ok(new AuthResponse(newJwt, newRefreshToken));
-
         } catch(Exception ex) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse("Invalid refresh token"));
         }
     }
 
-    public ResponseEntity<?> logout(HttpServletRequest request) {
+    public ResponseEntity<?> logout(HttpServletRequest httpServletRequest) {
         try {
-            String authHeader = request.getHeader("Authorization");
-            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String authHeader = httpServletRequest.getHeader("Authorization");
+            if(authHeader != null && authHeader.startsWith("Bearer ")) {
                 String jwt = authHeader.substring(7);
                 String username = jwtUtil.getUsernameFromToken(jwt);
 
@@ -115,9 +106,9 @@ public class AuthService {
                 refreshTokenRepository.saveAll(refreshTokens);
             }
 
-            return ResponseEntity.ok("Logged out successfully");
+            return ResponseEntity.ok("Logged out successfully !!");
         } catch (Exception ex) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ErrorResponse("Logout failed."));
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ErrorResponse("Logout failed !!"));
         }
     }
 }
